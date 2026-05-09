@@ -1,68 +1,58 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FoodEntry, DailyGoal } from '../types';
 
-const KEYS = {
-  FOOD_LOG: 'food_log',
-  DAILY_GOAL: 'daily_goal',
-} as const;
+const FOOD_LOG_KEY = 'food_log';
+const GOAL_KEY = 'daily_goal';
+const DEFAULT_GOAL = 2000;
 
-const DEFAULT_GOAL: DailyGoal = { calories: 2000 };
-
-export async function getAllEntries(): Promise<FoodEntry[]> {
-  const raw = await AsyncStorage.getItem(KEYS.FOOD_LOG);
-  if (!raw) return [];
-  return JSON.parse(raw) as FoodEntry[];
+export function getAllEntries(): FoodEntry[] {
+  const raw = localStorage.getItem(FOOD_LOG_KEY);
+  return raw ? (JSON.parse(raw) as FoodEntry[]) : [];
 }
 
-export async function getEntriesForDate(date: string): Promise<FoodEntry[]> {
-  const all = await getAllEntries();
-  return all.filter(e => e.date === date).sort((a, b) => a.timestamp - b.timestamp);
+export function getEntriesForDate(date: string): FoodEntry[] {
+  return getAllEntries()
+    .filter(e => e.date === date)
+    .sort((a, b) => a.timestamp - b.timestamp);
 }
 
-export async function addEntry(entry: FoodEntry): Promise<void> {
-  const all = await getAllEntries();
+export function addEntry(entry: FoodEntry): void {
+  const all = getAllEntries();
   all.push(entry);
-  await AsyncStorage.setItem(KEYS.FOOD_LOG, JSON.stringify(all));
+  localStorage.setItem(FOOD_LOG_KEY, JSON.stringify(all));
 }
 
-export async function deleteEntry(id: string): Promise<void> {
-  const all = await getAllEntries();
-  const filtered = all.filter(e => e.id !== id);
-  await AsyncStorage.setItem(KEYS.FOOD_LOG, JSON.stringify(filtered));
+export function deleteEntry(id: string): void {
+  const filtered = getAllEntries().filter(e => e.id !== id);
+  localStorage.setItem(FOOD_LOG_KEY, JSON.stringify(filtered));
 }
 
-export async function getUniqueDates(): Promise<string[]> {
-  const all = await getAllEntries();
-  const dates = [...new Set(all.map(e => e.date))];
+export function getUniquePastDates(today: string): string[] {
+  const dates = [...new Set(getAllEntries().map(e => e.date))].filter(d => d !== today);
   return dates.sort((a, b) => b.localeCompare(a));
 }
 
-export async function getDailyGoal(): Promise<DailyGoal> {
-  const raw = await AsyncStorage.getItem(KEYS.DAILY_GOAL);
-  if (!raw) return DEFAULT_GOAL;
-  return JSON.parse(raw) as DailyGoal;
+export function getDailyGoal(): number {
+  const raw = localStorage.getItem(GOAL_KEY);
+  return raw ? (JSON.parse(raw) as DailyGoal).calories : DEFAULT_GOAL;
 }
 
-export async function setDailyGoal(goal: DailyGoal): Promise<void> {
-  await AsyncStorage.setItem(KEYS.DAILY_GOAL, JSON.stringify(goal));
+export function setDailyGoal(calories: number): void {
+  localStorage.setItem(GOAL_KEY, JSON.stringify({ calories }));
 }
 
-/**
- * Returns today's date as "YYYY-MM-DD" in LOCAL time.
- * Do not use toISOString() — it returns UTC and can give the wrong date.
- */
 export function getTodayString(): string {
   const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${y}-${m}-${day}`;
 }
 
-export function formatDateDisplay(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+export function formatDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
 }
 
 export function generateId(): string {
