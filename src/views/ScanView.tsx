@@ -81,7 +81,7 @@ export function ScanView({ onFoodAdded }: Props) {
 
   return (
     <div style={s.container}>
-      <video ref={videoRef} style={s.video} muted playsInline />
+      <video ref={videoRef} style={s.video} muted playsInline autoPlay />
 
       <div style={s.overlay}>
         <div style={s.topDim} />
