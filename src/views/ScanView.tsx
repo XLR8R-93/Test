@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/browser';
-import { NotFoundException } from '@zxing/library';
 import { OFFProduct } from '../types';
 import { fetchProductByBarcode } from '../services/openFoodFacts';
 import { FoodDetailView } from './FoodDetailView';
@@ -11,60 +9,100 @@ interface Props {
 
 export function ScanView({ onFoodAdded }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
   const [status, setStatus] = useState<'scanning' | 'loading' | 'error' | 'found'>('scanning');
   const [errorMsg, setErrorMsg] = useState('');
   const [product, setProduct] = useState<OFFProduct | null>(null);
   const [barcode, setBarcode] = useState('');
+  const activeRef = useRef(true);
   const lastScanned = useRef('');
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader();
-    readerRef.current = reader;
+    activeRef.current = true;
+    let stream: MediaStream | null = null;
+    let rafId: number;
 
-    reader.decodeFromConstraints(
-      { video: { facingMode: 'environment' } },
-      videoRef.current!,
-      async (result, err) => {
-        if (!result) {
-          if (err && !(err instanceof NotFoundException)) {
-            console.warn(err);
-          }
+    async function start() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        });
+
+        if (!activeRef.current) return;
+
+        const video = videoRef.current!;
+        video.srcObject = stream;
+        await video.play();
+
+        if (!activeRef.current) return;
+
+        if (!('BarcodeDetector' in window)) {
+          setErrorMsg('Barcode scanning is not supported in this browser. Try Chrome on Android.');
+          setStatus('error');
           return;
         }
 
-        const code = result.getText();
-        if (code === lastScanned.current) return;
-        lastScanned.current = code;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const detector = new (window as any).BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code'],
+        });
 
-        setStatus('loading');
-        try {
-          const p = await fetchProductByBarcode(code);
-          if (!p) {
-            setErrorMsg('Product not found. Try another barcode.');
-            setStatus('error');
-            lastScanned.current = '';
-          } else {
-            setBarcode(code);
-            setProduct(p);
-            setStatus('found');
+        const scan = async () => {
+          if (!activeRef.current) return;
+          if (video.readyState >= 2) {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const barcodes: any[] = await detector.detect(video);
+              if (barcodes.length > 0) {
+                const code: string = barcodes[0].rawValue;
+                if (code && code !== lastScanned.current) {
+                  lastScanned.current = code;
+                  await handleBarcode(code);
+                  return;
+                }
+              }
+            } catch { /* frame not ready */ }
           }
-        } catch {
+          rafId = requestAnimationFrame(scan);
+        };
+
+        scan();
+      } catch {
+        if (activeRef.current) {
+          setErrorMsg('Could not access camera. Please allow camera permission and refresh the page.');
+          setStatus('error');
+        }
+      }
+    }
+
+    async function handleBarcode(code: string) {
+      setStatus('loading');
+      try {
+        const p = await fetchProductByBarcode(code);
+        if (!activeRef.current) return;
+        if (!p) {
+          setErrorMsg('Product not found. Try another barcode.');
+          setStatus('error');
+          lastScanned.current = '';
+        } else {
+          setBarcode(code);
+          setProduct(p);
+          setStatus('found');
+        }
+      } catch {
+        if (activeRef.current) {
           setErrorMsg('Network error. Check your connection.');
           setStatus('error');
           lastScanned.current = '';
         }
       }
-    ).then(controls => {
-      controlsRef.current = controls;
-    }).catch(() => {
-      setErrorMsg('Camera not available. Please allow camera access and refresh.');
-      setStatus('error');
-    });
+    }
+
+    start();
 
     return () => {
-      controlsRef.current?.stop();
+      activeRef.current = false;
+      cancelAnimationFrame(rafId);
+      stream?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
