@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  name            String
+  sex             String?
+  dob             DateTime?
+  heightCm        Float?
+  activityLevel   String?
+  goal            String?  // cut / maintain / bulk
+  targetCalories  Int?
+  targetProteinG  Int?
+  targetCarbsG    Int?
+  targetFatG      Int?
+  shareWithPartnerId String?
+  partner         User?    @relation("UserPartner", fields: [shareWithPartnerId], references: [id])
+  partnerOf       User[]   @relation("UserPartner")
+  createdAt       DateTime @default(now())
+
+  foodEntries     FoodEntry[]
+  weightEntries   WeightEntry[]
+  waterEntries    WaterEntry[]
+  exerciseEntries ExerciseEntry[]
+  customFoods     Food[]
+  recipes         Recipe[]
+}
+
+model Food {
+  id              String   @id @default(cuid())
+  name            String
+  brand           String?
+  barcode         String?
+  source          String   @default("custom") // "off" (Open Food Facts) | "custom"
+  servingSizeG    Float    @default(100)
+  servingLabel    String?  // e.g. "1 slice"
+  kcalPer100g     Float
+  proteinPer100g  Float    @default(0)
+  carbsPer100g    Float    @default(0)
+  fatPer100g      Float    @default(0)
+  fibrePer100g    Float?
+  sugarPer100g    Float?
+  sodiumMgPer100g Float?
+  satFatPer100g   Float?
+  createdByUserId String?
+  createdBy       User?    @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now())
+
+  foodEntries         FoodEntry[]
+  recipeIngredients   RecipeIngredient[]
+}
+
+model FoodEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  foodId      String
+  food        Food     @relation(fields: [foodId], references: [id])
+  servingQty  Float    @default(1)
+  meal        String   // B / L / D / S
+  consumedAt  DateTime @default(now())
+  notes       String?
+  photoUrl    String?
+}
+
+model Recipe {
+  id          String             @id @default(cuid())
+  userId      String
+  user        User               @relation(fields: [userId], references: [id])
+  name        String
+  servings    Float              @default(1)
+  notes       String?
+  createdAt   DateTime           @default(now())
+  ingredients RecipeIngredient[]
+}
+
+model RecipeIngredient {
+  id       String @id @default(cuid())
+  recipeId String
+  recipe   Recipe @relation(fields: [recipeId], references: [id])
+  foodId   String
+  food     Food   @relation(fields: [foodId], references: [id])
+  qtyG     Float
+}
+
+model WeightEntry {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  date     DateTime
+  weightKg Float
+  notes    String?
+}
+
+model WaterEntry {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  date     DateTime
+  amountMl Int
+}
+
+model ExerciseEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  date        DateTime
+  name        String
+  durationMin Int?
+  kcalBurned  Int?
+}
